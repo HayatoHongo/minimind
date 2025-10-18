@@ -265,6 +265,86 @@ ollama run jingyaogong/minimind2
 vllm serve ./MiniMind2/ --served-model-name "minimind"
 ```
 
+### 针对使用 GPU Cloud（日本、美国、欧洲）的用户
+
+ubuntu: 22.04
+
+#### 🧰 前提检查
+
+请先确认系统已安装 **Python 3.10**
+
+```bash
+python3 --version
+````
+
+如果输出的版本不是 `Python 3.10.x`，请执行以下命令安装：
+
+```bash
+sudo apt update
+sudo apt install -y python3.10 python3.10-venv python3.10-dev
+```
+
+升级 `pip`、`setuptools`、`wheel` 到最新版本：
+
+```bash
+python3.10 -m pip install --upgrade pip setuptools wheel
+```
+
+### 🧩 克隆项目并创建虚拟环境
+
+在任意工作目录中执行：
+
+```bash
+cd minimind
+```
+
+创建虚拟环境：
+
+```bash
+python3.10 -m venv .venv
+```
+
+激活虚拟环境：
+
+```bash
+source .venv/bin/activate
+```
+
+### 🧹 卸载旧版本的 PyTorch（如有）
+
+```bash
+pip uninstall -y torch torchvision torchaudio
+```
+
+### ⚙️ 安装指定版本的 PyTorch 和依赖
+
+```bash
+pip install torch==2.4.0+cu121 torchvision==0.19.0+cu121 torchaudio==2.4.0+cu121 --index-url https://download.pytorch.org/whl/cu121
+pip install -r requirements.txt --no-cache-dir
+```
+
+### ☁️ 若使用云端运行（本地无模型文件）
+
+请修改 `scripts/web_demo.py` 的第 170～177 行，内容改为如下：
+
+```python
+else:
+    MODEL_PATHS = {
+        "MiniMind2-R1 (0.1B)": ["jingyaogong/MiniMind2-R1", "MiniMind2-R1"],
+        "MiniMind2-Small-R1 (0.02B)": ["jingyaogong/MiniMind2-Small-R1", "MiniMind2-Small-R1"],
+        "MiniMind2 (0.1B)": ["jingyaogong/MiniMind2", "MiniMind2"],
+        "MiniMind2-MoE (0.15B)": ["jingyaogong/MiniMind2-MoE", "MiniMind2-MoE"],
+        "MiniMind2-Small (0.02B)": ["jingyaogong/MiniMind2-Small", "MiniMind2-Small"]
+    }
+```
+### 🚀 启动 Web Demo
+
+```bash
+streamlit run scripts/web_demo.py
+```
+
+运行后，即可通过浏览器访问交互界面，测试已有模型的效果。
+
 ## Ⅱ 从0开始自己训练
 
 ### 1.环境准备
@@ -1456,5 +1536,4 @@ ollama run minimind2
 # License
 
 This repository is licensed under the [Apache-2.0 License](LICENSE).
-
 
