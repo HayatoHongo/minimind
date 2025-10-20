@@ -1537,3 +1537,18 @@ ollama run minimind2
 
 This repository is licensed under the [Apache-2.0 License](LICENSE).
 
+
+```bash
+python - <<'EOF'
+import torch
+from safetensors.torch import save_file
+
+input_path = "/Users/hongohayato/minimind/checkpoint/full_sft_512.pth"
+output_path = "/Users/hongohayato/minimind/checkpoint/full_sft_512.safetensors"
+
+weights = torch.load(input_path, map_location="cpu")
+save_file(weights, output_path)
+
+print(f"✅ 変換完了: {output_path}")
+EOF
+```
