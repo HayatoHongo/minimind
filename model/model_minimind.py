@@ -20,7 +20,7 @@ class MiniMindConfig(PretrainedConfig):
             num_attention_heads: int = 8,
             num_hidden_layers: int = 8,
             num_key_value_heads: int = None, # 2 # Noneに設定するとGQAが無効化され、標準のMulti-Head Attentionとなる
-            vocab_size: int = 50259, # 6400 # GPT-2の50257に加え、特殊トークン分を追加
+            vocab_size: int = 50260, # 6400 # GPT-2の50257に加え、特殊トークン分を追加
             rms_norm_eps: float = 1e-05,
             rope_theta: int = 1000000.0,
             inference_rope_scaling: bool = False,
