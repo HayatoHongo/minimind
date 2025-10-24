@@ -19,7 +19,7 @@ class MiniMindConfig(PretrainedConfig):
             max_position_embeddings: int = 32768,
             num_attention_heads: int = 8,
             num_hidden_layers: int = 8,
-            num_key_value_heads: int = 2,
+            num_key_value_heads: int = None, # 2 # Noneに設定するとGQAが無効化され、標準のMulti-Head Attentionとなる
             vocab_size: int = 6400,
             rms_norm_eps: float = 1e-05,
             rope_theta: int = 1000000.0,

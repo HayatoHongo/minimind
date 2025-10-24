@@ -173,10 +173,10 @@ else:
         "MiniMind2-Small-R1 (0.02B)": ["jingyaogong/MiniMind2-Small-R1", "MiniMind2-Small-R1"],
         "MiniMind2 (0.1B)": ["jingyaogong/MiniMind2", "MiniMind2"],
         "MiniMind2-MoE (0.15B)": ["jingyaogong/MiniMind2-MoE", "MiniMind2-MoE"],
-        "MiniMind2-Small (0.02B)": ["jingyaogong/MiniMind2-Small", "MiniMind2-Small"]
+        "MiniMind2-Small (0.02B)": ["HayatoHongo/MiniMind2-Small", "MiniMind2-Small"]
     }
 
-    selected_model = st.sidebar.selectbox('Models', list(MODEL_PATHS.keys()), index=2)  # 默认选择 MiniMind2
+    selected_model = st.sidebar.selectbox('Models', list(MODEL_PATHS.keys()), index=4)  # 默认选择 MiniMind2
     model_path = MODEL_PATHS[selected_model][0]
     slogan = f"Hi, I'm {MODEL_PATHS[selected_model][1]}"
 
