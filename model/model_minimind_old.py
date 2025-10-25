@@ -13,7 +13,7 @@ class MiniMindConfig(PretrainedConfig):
             dropout: float = 0.0,
             bos_token_id: int = 1,
             eos_token_id: int = 2,
-            hidden_act: str = 'relu',
+            hidden_act: str = 'silu',
             hidden_size: int = 512,
             intermediate_size: int = None,
             max_position_embeddings: int = 32768,
@@ -25,8 +25,6 @@ class MiniMindConfig(PretrainedConfig):
             rope_theta: int = 1000000.0,
             inference_rope_scaling: bool = False,
             flash_attn: bool = True,
-            use_rope: bool = True,  # ← 追加：RoPEを使うかどうか切り替える
-            norm_type: str = "nn.LayerNorm",  # "rmsnorm"  # ← ★ 追加
             ####################################################
             # Here are the specific configurations of MOE
             # When use_moe is false, the following is invalid
@@ -65,8 +63,6 @@ class MiniMindConfig(PretrainedConfig):
             "type": "yarn"
         } if self.inference_rope_scaling else None
         self.flash_attn = flash_attn
-        self.use_rope = use_rope  # ← 追加
-        self.norm_type = norm_type # ← 追加
         ####################################################
         # Here are the specific configurations of MOE
         # When use_moe is false, the following is invalid
@@ -172,7 +168,7 @@ class Attention(nn.Module):
 
     def forward(self,
                 x: torch.Tensor,
-                position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None, # RoPE用
+                position_embeddings: Tuple[torch.Tensor, torch.Tensor],  # 修改为接收cos和sin
                 past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
                 use_cache=False,
                 attention_mask: Optional[torch.Tensor] = None):
@@ -182,10 +178,8 @@ class Attention(nn.Module):
         xk = xk.view(bsz, seq_len, self.n_local_kv_heads, self.head_dim)
         xv = xv.view(bsz, seq_len, self.n_local_kv_heads, self.head_dim)
 
-        # RoPEが有効な場合のみ適用
-        if position_embeddings is not None:
-            cos, sin = position_embeddings
-            xq, xk = apply_rotary_pos_emb(xq, xk, cos[:seq_len], sin[:seq_len])
+        cos, sin = position_embeddings
+        xq, xk = apply_rotary_pos_emb(xq, xk, cos[:seq_len], sin[:seq_len])
 
         # kv_cache实现
         if past_key_value is not None:
@@ -371,14 +365,8 @@ class MiniMindBlock(nn.Module):
         self.self_attn = Attention(config)
 
         self.layer_id = layer_id
-
-        # 🔽 ここを修正
-        NormLayer = RMSNorm if config.norm_type.lower() == "rmsnorm" else nn.LayerNorm
-        self.input_layernorm = NormLayer(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = NormLayer(config.hidden_size, eps=config.rms_norm_eps)
-
-        #self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        #self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.input_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.mlp = FeedForward(config) if not config.use_moe else MOEFeedForward(config)
 
     def forward(self, hidden_states, position_embeddings, past_key_value=None, use_cache=False, attention_mask=None):
@@ -400,63 +388,32 @@ class MiniMindModel(nn.Module):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size)
         self.dropout = nn.Dropout(config.dropout)
         self.layers = nn.ModuleList([MiniMindBlock(l, config) for l in range(self.num_hidden_layers)])
-        #self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        
-        # 🔽 最終Normを切り替え
-        NormLayer = RMSNorm if config.norm_type.lower() == "rmsnorm" else nn.LayerNorm
-        self.norm = NormLayer(config.hidden_size, eps=config.rms_norm_eps)
+        self.norm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # 🔹 use_rope=False の場合のみ Learnable Position Embedding を作る
-        if not config.use_rope:
-            self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        else:
-            self.position_embeddings = None
+        freqs_cos, freqs_sin = precompute_freqs_cis(dim=config.hidden_size // config.num_attention_heads,
+                                                    end=config.max_position_embeddings, rope_base=config.rope_theta,
+                                                    rope_scaling=config.rope_scaling)
+        self.register_buffer("freqs_cos", freqs_cos, persistent=False)
+        self.register_buffer("freqs_sin", freqs_sin, persistent=False)
 
-
-        # 🔹 use_rope=True の場合のみ RoPEを初期化
-        if config.use_rope:
-            freqs_cos, freqs_sin = precompute_freqs_cis(
-                dim=config.hidden_size // config.num_attention_heads,
-                end=config.max_position_embeddings,
-                rope_base=config.rope_theta,
-                rope_scaling=config.rope_scaling
-            )
-            self.register_buffer("freqs_cos", freqs_cos, persistent=False)
-            self.register_buffer("freqs_sin", freqs_sin, persistent=False)
-        else:
-            self.freqs_cos = self.freqs_sin = None
-
-    def forward(
-        self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
-        use_cache: bool = False,
-        **kwargs,
-    ):
+    def forward(self,
+                input_ids: Optional[torch.Tensor] = None,
+                attention_mask: Optional[torch.Tensor] = None,
+                past_key_values: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
+                use_cache: bool = False,
+                **kwargs):
         batch_size, seq_length = input_ids.shape
-        if hasattr(past_key_values, 'layers'):
-            past_key_values = None
+        if hasattr(past_key_values, 'layers'): past_key_values = None
         past_key_values = past_key_values or [None] * len(self.layers)
         start_pos = past_key_values[0][0].shape[1] if past_key_values[0] is not None else 0
 
-        # トークン埋め込み
-        token_embeddings = self.embed_tokens(input_ids)
+        hidden_states = self.dropout(self.embed_tokens(input_ids))
 
-        # RoPE 無効時は Learnable 位置埋め込みを使用
-        if not self.config.use_rope:
-            pos_ids = torch.arange(start_pos, start_pos + seq_length, device=input_ids.device)
-            pos_embeds = self.position_embeddings(pos_ids)[None, :, :]
-            hidden_states = token_embeddings + pos_embeds
-            position_embeddings = None
-        else:
-            hidden_states = token_embeddings
-            position_embeddings = (
-                self.freqs_cos[start_pos:start_pos + seq_length],
-                self.freqs_sin[start_pos:start_pos + seq_length]
-            )
+        position_embeddings = (
+            self.freqs_cos[start_pos:start_pos + seq_length],
+            self.freqs_sin[start_pos:start_pos + seq_length]
+        )
 
-        hidden_states = self.dropout(hidden_states)
         presents = []
         for layer_idx, (layer, past_key_value) in enumerate(zip(self.layers, past_key_values)):
             hidden_states, present = layer(
