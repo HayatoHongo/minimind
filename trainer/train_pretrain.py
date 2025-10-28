@@ -149,7 +149,19 @@ if __name__ == "__main__":
 
     args.wandb_run_name = f"MiniMind-Pretrain-Epoch-{args.epochs}-BatchSize-{args.batch_size}-LearningRate-{args.learning_rate}"
 
-    ctx = nullcontext() if device_type == "cpu" else torch.cuda.amp.autocast()
+    # ctx = nullcontext() if device_type == "cpu" else torch.cuda.amp.autocast()
+    ### 追加
+    if device_type == "cpu":
+        ctx = nullcontext()
+    else:
+        if args.dtype == "bfloat16":
+            ctx = torch.cuda.amp.autocast(dtype=torch.bfloat16)
+        elif args.dtype == "float16":
+            ctx = torch.cuda.amp.autocast(dtype=torch.float16)
+        else:
+            ctx = nullcontext()  # float32 の場合はAMPを使わない
+    ### 追加ここまで
+
 
     ddp = int(os.environ.get("RANK", -1)) != -1  # is this a ddp run?
     ddp_local_rank, DEVICE = 0, "cuda:0"
