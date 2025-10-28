@@ -26,7 +26,7 @@ class MiniMindConfig(PretrainedConfig):
             inference_rope_scaling: bool = False,
             flash_attn: bool = True,
             use_rope: bool = True,  # ← 追加：RoPEを使うかどうか切り替える
-            norm_type: str = "nn.LayerNorm",  # "rmsnorm"  # ← ★ 追加
+            norm_type: str = "rmsnorm",  # "rmsnorm"  # ← ★ 追加
             ####################################################
             # Here are the specific configurations of MOE
             # When use_moe is false, the following is invalid
